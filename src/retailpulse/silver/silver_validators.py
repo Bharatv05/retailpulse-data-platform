@@ -17,19 +17,16 @@ from typing   import Any, Optional, Tuple
 import pandas as pd
 
 
-# ── Type: TEXT passthrough ─────────────────────────────────────────────────────
-
-def cast_text(value: Any) -> Tuple[Optional[str], Optional[str]]:
-    if pd.isna(value) or value is None:
-        return None, None
-    return str(value).strip(), None
-
-
 # ── Type: DATE ─────────────────────────────────────────────────────────────────
 
 def cast_date(value: Any) -> Tuple[Optional[str], Optional[str]]:
-    if pd.isna(value) or value is None:
+    if value is None or value is pd.NaT:
         return None, None
+    try:
+        if pd.isna(value):
+            return None, None
+    except (ValueError, TypeError):
+        pass
     try:
         return pd.to_datetime(value).date(), None
     except Exception:
@@ -39,8 +36,13 @@ def cast_date(value: Any) -> Tuple[Optional[str], Optional[str]]:
 # ── Type: TIMESTAMP ────────────────────────────────────────────────────────────
 
 def cast_timestamp(value: Any) -> Tuple[Optional[datetime], Optional[str]]:
-    if pd.isna(value) or value is None:
+    if value is None or value is pd.NaT:
         return None, None
+    try:
+        if pd.isna(value):
+            return None, None
+    except (ValueError, TypeError):
+        pass
     try:
         return pd.to_datetime(value), None
     except Exception:
@@ -50,8 +52,13 @@ def cast_timestamp(value: Any) -> Tuple[Optional[datetime], Optional[str]]:
 # ── Type: NUMERIC ──────────────────────────────────────────────────────────────
 
 def cast_numeric(value: Any) -> Tuple[Optional[float], Optional[str]]:
-    if pd.isna(value) or value is None:
+    if value is None or value is pd.NaT:
         return None, None
+    try:
+        if pd.isna(value):
+            return None, None
+    except (ValueError, TypeError):
+        pass
     try:
         return float(value), None
     except Exception:
@@ -61,8 +68,13 @@ def cast_numeric(value: Any) -> Tuple[Optional[float], Optional[str]]:
 # ── Type: INTEGER ──────────────────────────────────────────────────────────────
 
 def cast_integer(value: Any) -> Tuple[Optional[int], Optional[str]]:
-    if pd.isna(value) or value is None:
+    if value is None or value is pd.NaT:
         return None, None
+    try:
+        if pd.isna(value):
+            return None, None
+    except (ValueError, TypeError):
+        pass
     try:
         return int(float(value)), None
     except Exception:
@@ -72,8 +84,13 @@ def cast_integer(value: Any) -> Tuple[Optional[int], Optional[str]]:
 # ── Type: BOOLEAN ──────────────────────────────────────────────────────────────
 
 def cast_boolean(value: Any) -> Tuple[Optional[bool], Optional[str]]:
-    if pd.isna(value) or value is None:
+    if value is None or value is pd.NaT:
         return None, None
+    try:
+        if pd.isna(value):
+            return None, None
+    except (ValueError, TypeError):
+        pass
     if isinstance(value, bool):
         return value, None
     if str(value).strip().lower() in {"true", "1", "yes"}:
@@ -83,17 +100,55 @@ def cast_boolean(value: Any) -> Tuple[Optional[bool], Optional[str]]:
     return None, f"Cannot cast '{value}' to BOOLEAN"
 
 
-# ── NULL check on critical column ──────────────────────────────────────────────
+# ── Text ────────────────────────────────────────────────────────────────────
+
+def cast_text(value: Any) -> Tuple[Optional[str], Optional[str]]:
+    if value is None or value is pd.NaT:
+        return None, None
+    try:
+        if pd.isna(value):
+            return None, None
+    except (ValueError, TypeError):
+        pass
+    return str(value).strip(), None
+
+
+# ── NULL check ─────────────────────────────────────────────────────────────
 
 def check_not_null(value: Any, column_name: str) -> Optional[str]:
-    """
-    Returns error string if value is NULL.
-    Returns None if value is present (no error).
-    """
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    if value is None or value is pd.NaT:
         return f"Critical column '{column_name}' is NULL"
+    try:
+        if pd.isna(value):
+            return f"Critical column '{column_name}' is NULL"
+    except (ValueError, TypeError):
+        pass
     return None
 
+# ── Safe date comparison ───────────────────────────────────────────────────────
+
+def safe_date_before(date_a, date_b) -> bool:
+    """
+    Returns True if date_a < date_b.
+    Returns False if either is None or NaT.
+
+    Usage:
+      if safe_date_before(conversion_date, targeted_date):
+          errors.append("conversion before targeting")
+
+    Why:
+      NaT < datetime.date → TypeError
+      None < datetime.date → TypeError in some Python versions
+      This function handles both safely.
+    """
+    if date_a is None or date_b is None:
+        return False
+    if date_a is pd.NaT or date_b is pd.NaT:
+        return False
+    try:
+        return date_a < date_b
+    except TypeError:
+        return False
 
 # ── Domain value check ─────────────────────────────────────────────────────────
 

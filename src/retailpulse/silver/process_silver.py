@@ -37,6 +37,7 @@ from retailpulse.silver.silver_validators import (
     cast_timestamp,
     check_domain,
     check_not_null,
+    safe_date_before,          # ← ADD THIS
     serialise_record,
 )
 
@@ -161,7 +162,7 @@ def process_customers(conn, ingestion_id: str) -> dict:
         e = check_not_null(customer_name, "customer_name"); errors += [e] if e else []
 
         # ── Step 4: Business rules ─────────────────────────────────────────────
-        if updated_at and created_at and updated_at < created_at:
+        if safe_date_before(updated_at, created_at):
             errors.append("updated_at is before created_at")
 
         # ── Step 5: Route ──────────────────────────────────────────────────────
@@ -301,7 +302,7 @@ def process_orders(conn, ingestion_id: str) -> dict:
         e = check_domain(order_status, VALID_ORDER_STATUSES, "order_status")
         errors += [e] if e else []
 
-        if updated_at and created_at and updated_at < created_at:
+        if safe_date_before(updated_at, created_at):
             errors.append("updated_at is before created_at")
 
         if errors:
@@ -484,8 +485,7 @@ def process_shipments(conn, ingestion_id: str) -> dict:
         e = check_domain(shipment_status, VALID_SHIPMENT_STATUSES, "shipment_status")
         errors += [e] if e else []
 
-        if (shipment_date and expected_delivery_date
-                and expected_delivery_date < shipment_date):
+        if safe_date_before(expected_delivery_date, shipment_date):
             errors.append("expected_delivery_date is before shipment_date")
 
         if (shipment_status == "DELIVERED"
@@ -550,7 +550,7 @@ def process_campaigns(conn, ingestion_id: str) -> dict:
         if budget is not None and budget <= 0:
             errors.append(f"budget {budget} must be positive")
 
-        if start_date and end_date and end_date < start_date:
+        if safe_date_before(end_date, start_date):
             errors.append("end_date is before start_date")
 
         e = check_domain(channel,         VALID_CAMPAIGN_CHANNELS, "channel")
@@ -620,8 +620,7 @@ def process_campaign_customers(conn, ingestion_id: str) -> dict:
         if converted is True and conversion_date is None:
             errors.append("converted=True but conversion_date is missing")
 
-        if (targeted_date and conversion_date
-                and conversion_date < targeted_date):
+        if safe_date_before(conversion_date, targeted_date):
             errors.append("conversion_date is before targeted_date")
 
         if errors:
