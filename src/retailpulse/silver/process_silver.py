@@ -37,7 +37,8 @@ from retailpulse.silver.silver_validators import (
     cast_timestamp,
     check_domain,
     check_not_null,
-    safe_date_before,          # ← ADD THIS
+    is_null_value,         
+    safe_date_before,
     serialise_record,
 )
 
@@ -162,8 +163,9 @@ def process_customers(conn, ingestion_id: str) -> dict:
         e = check_not_null(customer_name, "customer_name"); errors += [e] if e else []
 
         # ── Step 4: Business rules ─────────────────────────────────────────────
-        if safe_date_before(updated_at, created_at):
-            errors.append("updated_at is before created_at")
+        if not is_null_value(updated_at) and not is_null_value(created_at):
+            if safe_date_before(updated_at, created_at):
+                errors.append("updated_at is before created_at")
 
         # ── Step 5: Route ──────────────────────────────────────────────────────
         if errors:
@@ -302,8 +304,9 @@ def process_orders(conn, ingestion_id: str) -> dict:
         e = check_domain(order_status, VALID_ORDER_STATUSES, "order_status")
         errors += [e] if e else []
 
-        if safe_date_before(updated_at, created_at):
-            errors.append("updated_at is before created_at")
+        if not is_null_value(updated_at) and not is_null_value(created_at):
+            if safe_date_before(updated_at, created_at):
+                errors.append("updated_at is before created_at")
 
         if errors:
             quarantine(conn, "orders", order_id,
@@ -614,10 +617,10 @@ def process_campaign_customers(conn, ingestion_id: str) -> dict:
         e = check_not_null(campaign_id, "campaign_id"); errors += [e] if e else []
         e = check_not_null(customer_id, "customer_id"); errors += [e] if e else []
 
-        if converted is False and conversion_date is not None:
+        if converted is False and not is_null_value(conversion_date):
             errors.append("converted=False but conversion_date is set")
 
-        if converted is True and conversion_date is None:
+        if converted is True and is_null_value(conversion_date):
             errors.append("converted=True but conversion_date is missing")
 
         if safe_date_before(conversion_date, targeted_date):

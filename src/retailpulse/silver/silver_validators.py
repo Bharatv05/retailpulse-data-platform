@@ -177,3 +177,31 @@ def serialise_record(row: dict) -> str:
         {k: str(v) if v is not None else None for k, v in row.items()},
         default=str,
     )
+
+# ── Universal null checker ─────────────────────────────────────────────────────
+
+def is_null_value(value: Any) -> bool:
+    """
+    Returns True if value is any form of null:
+      None         → Python null
+      pd.NaT       → pandas datetime null
+      float('nan') → pandas NaN (what pandas stores for missing object values)
+
+    Why this matters:
+      psycopg fetches NULL TEXT → Python None
+      pandas DataFrame converts None → float('nan') in some cases
+      float('nan') is not None → True (incorrect null check)
+      This function catches all three cases reliably.
+
+    Usage:
+      if not is_null_value(conversion_date):
+          # value is genuinely present
+    """
+    if value is None:
+        return True
+    if value is pd.NaT:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
