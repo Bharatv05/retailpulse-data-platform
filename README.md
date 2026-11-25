@@ -1,382 +1,239 @@
-<h1 align="center">RetailPulse Data Platform</h1>
+<h1 align="center">🛒 RetailPulse Data Platform</h1>
 
 <p align="center">
-  An end-to-end Data Engineering project simulating a production-style
-  retail e-commerce data platform — built phase by phase.
+  An end-to-end data engineering project that builds a production-style retail data platform,<br/>
+  phase by phase: from synthetic source systems to a Bronze → Silver → Gold analytics layer.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white" />
-  <img src="https://img.shields.io/badge/Pandas-150458?logo=pandas&logoColor=white" />
-  <img src="https://img.shields.io/badge/Phase-3%20Complete-27AE60" />
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/PostgreSQL-18-4169E1?style=flat-square&logo=postgresql&logoColor=white" />
+  <img src="https://img.shields.io/badge/Pandas-150458?style=flat-square&logo=pandas&logoColor=white" />
+  <img src="https://img.shields.io/badge/NumPy-013243?style=flat-square&logo=numpy&logoColor=white" />
+  <img src="https://img.shields.io/badge/Faker-synthetic%20data-6A5ACD?style=flat-square" />
+  <img src="https://img.shields.io/badge/Phase%203-Complete-2EA043?style=flat-square" />
+  <img src="https://img.shields.io/badge/Next-Phase%204%20Bronze-D29922?style=flat-square" />
 </p>
 
 ---
 
-## 🎯 Project Goal
+## 📌 Why This Project
 
-Build a reliable **Single Source of Truth** for a retail business by constructing
-an end-to-end data platform that evolves from a local Python + PostgreSQL pipeline
-into a production-style architecture covering ingestion, validation,
-transformation, and analytics.
+Real data platforms don't start with clean data. They start with several source systems that disagree with each other, contain duplicates, NULLs, broken references and impossible timestamps.
 
-The platform is designed to answer real business questions:
+RetailPulse simulates that reality for a fictional sports-retail e-commerce company and builds the platform that turns it into a **single source of truth** the business can trust. The goal is to answer questions like:
 
-- What is the total revenue per day / week / month?
-- Which products and categories generate the highest revenue?
-- Which marketing campaigns produced the best ROI?
-- Which customers are most active — and which never purchased?
-- What is the refund and cancellation rate over time?
+- What is revenue per day / week / month, and which products and categories drive it?
+- Which marketing campaigns and channels deliver the best ROI?
+- Which customers are most active, and which never purchased?
+- What are the refund, cancellation and delivery-delay rates over time?
 
 ---
 
-## 🗂️ Project Architecture
+## 🏗️ Architecture
 
-### Data Flow
-External / Simulated Sources ↓ SOURCE ← Simulated CSV files (data/source/) ↓ RAW ← Data preserved exactly as received ↓ BRONZE ← Ingested into PostgreSQL, metadata added ↓ SILVER ← Cleaned, validated, business rules applied ↓ GOLD ← Aggregated, analytics-ready datasets ↓ Dashboards / BI
+```text
+ ┌──────────────────────┐
+ │  Simulated sources   │   customers · products · orders · order_items
+ │  (data/source/*.csv) │   payments · shipments · campaigns · campaign_customers
+ └──────────┬───────────┘
+            │  clean + *_dirty.csv (controlled quality issues)
+            ▼
+ ┌──────────────────────┐
+ │  RAW                 │   exact copy of what was received, never modified
+ └──────────┬───────────┘
+            ▼
+ ┌──────────────────────┐
+ │  BRONZE (PostgreSQL) │   ingested as-is + audit metadata (load time, source file, batch id)
+ └──────────┬───────────┘
+            ▼
+ ┌──────────────────────┐
+ │  SILVER              │   validated against data contracts, deduplicated, typed;
+ │                      │   bad records quarantined, not silently dropped
+ └──────────┬───────────┘
+            ▼
+ ┌──────────────────────┐
+ │  GOLD                │   facts, dimensions and business KPIs
+ └──────────┬───────────┘
+            ▼
+      Dashboards / BI
+```
 
+---
 
-### Layer Responsibilities
+## ✅ What's Built So Far
 
-| Layer | Purpose |
+### 1. Requirements & data contracts (docs first, code second)
+Before writing any pipeline code, the project defines what "correct" means:
+
+| Document | What it covers |
 |---|---|
-| `source/` | Simulated external system data (generated locally) |
-| `raw/` | Exact copy of received data — never modified |
-| `bronze/` | Ingested layer with audit metadata |
-| `silver/` | Validated and cleaned data |
-| `gold/` | Business metrics and aggregations |
+| [`business_requirements.md`](docs/business_requirements.md) | Stakeholders, business questions, functional & non-functional requirements (idempotency, lineage, reproducibility, security) |
+| [`data_sources.md`](docs/data_sources.md) | Every source system, its format and expected frequency |
+| [`data_contracts.md`](docs/data_contracts.md) | Grain, schema, nullability, uniqueness, referential and business rules per dataset, plus schema-change and duplicate-handling policies |
+| [`data_dictionary.md`](docs/data_dictionary.md) | Column-level definitions |
 
----
+### 2. Synthetic source systems with real business behaviour
+A modular generator (`src/retailpulse/data_generation/`) produces ~350K connected rows across 8 datasets:
 
-## 🛠️ Technology Stack
+| Dataset | Rows | Grain |
+|---|---:|---|
+| Customers | 10,000 | one row per customer |
+| Products | 1,000 | one row per product |
+| Orders | 40,000 | one row per order |
+| Order items | ~101,952 | one row per product per order |
+| Payments | 40,000 | one row per order payment |
+| Shipments | ~34,176 | one row per shipment (eligible orders only) |
+| Campaigns | 50 | one row per marketing campaign |
+| Campaign customers | ~126,854 | customer × campaign bridge |
 
-| Tool | Purpose |
+The data follows the rules a real business would:
+- **Referential integrity:** orders reference real customers and products; payments and shipments reference real orders.
+- **Business rules:** category-aware pricing, discontinued products excluded from new orders, COD payments can't fail or retry, shipments only for eligible order statuses, conversions always after targeting.
+- **Realistic distributions:** UPI 35% / Card 30% / Net banking 20% / COD 15%; Delivered 60% / Shipped 15% / Confirmed 10% / Pending 8% / Cancelled 7%; small baskets most common.
+- **Intentional vs accidental NULLs:** `actual_delivery_date` is NULL for in-transit shipments *by design*, and that is tested explicitly.
+- **Reproducible:** fixed `RANDOM_SEED = 42`, so every run produces identical output.
+- **Config-driven:** sizes, catalogs, price ranges and distributions all live in [`config.py`](src/retailpulse/data_generation/config.py).
+
+### 3. Controlled data-quality injection
+[`quality_injector.py`](src/retailpulse/data_generation/quality_injector.py) writes a `*_dirty.csv` next to every clean file, using declarative rules from [`injector_config.py`](src/retailpulse/data_generation/injector_config.py). Because the dirty data is generated from known clean data, every Silver-layer check can be **measured against a known answer**.
+
+| Dataset | Injected problems (rate) |
 |---|---|
-| Python 3.10+ | Core processing and pipeline logic |
-| PostgreSQL 18 | Relational database and storage |
-| Pandas | Data generation and manipulation |
-| NumPy | Reproducible random generation |
-| SQL | Transformations and querying |
-| Git | Version control |
+| Customers | NULL email (3%), invalid email format, invalid phone, duplicates (1% each), `updated_at < created_at` (0.5%) |
+| Products | NULL price, invalid discount (<0 or >100), wrong category/subcategory pair (1% each), invalid status, duplicates |
+| Orders | NULL customer_id, invalid status, duplicates (1% each), negative totals, timestamp reversal (0.5%) |
+| Order items | orphan product_id, zero/negative quantity, wrong line total (1% each), orphan order_id, duplicates |
+| Payments | amount mismatch, invalid status, NULL method (1% each), orphan order_id, duplicates |
+| Shipments | shipped after expected delivery, invalid status, DELIVERED with no delivery date (1% each), orphan order_id |
+| Campaigns | end before start, negative budget, invalid status, duplicates |
+| Campaign customers | duplicate pairs (2%), orphan IDs, conversion before targeting, "not converted" rows with a conversion date |
 
-**Future phases will introduce:**
-PySpark · Docker · Cloud Storage · Airflow · Streaming
+The injector uses a different random seed from the generator, so it stays reproducible on its own.
 
----
-
-## 📦 Dataset Overview
-
-The source layer simulates a fully connected retail business:
-
-| Dataset | File(s) | Rows | Description |
-|---|---|---|---|
-| Customers | `customers.csv` | 10,000 | Customer master — one row per customer |
-| Products | `products.csv` | 1,000 | Product master — one row per product |
-| Orders | `orders.csv` | 40,000 | Order headers — one row per order |
-| Order Items | `order_items.csv` | ~101,952 | Line items — one row per product per order |
-| Payments | `payments.csv` | 40,000 | Payment records — one row per order |
-| Shipments | `shipments.csv` | ~34,176 | Shipment records for eligible orders |
-| Campaigns | `campaigns.csv` | 50 | Marketing campaign master |
-| Campaign Customers | `campaign_customers.csv` | ~126,854 | Bridge table — customer × campaign |
-
+### 4. Verification scripts
+Verification scripts for products, orders, payments, shipments and marketing check row counts, ID uniqueness, intentional vs accidental NULLs, referential integrity, business-rule compliance, date logic and value distributions.
 
 ---
 
-## 🏗️ Data Generation Design Principles
+## 🗺️ Roadmap
 
-The data generator is built to reflect **real business behaviour**, not random values.
-
-**1. Referential Integrity**
-Order customer IDs come from the customer master.
-Order product IDs come from the product master.
-Payments and shipments reference real order IDs.
-
-**2. Business Rules Enforced**
-- Category-aware product pricing (Cricket vs Running vs Tennis etc.)
-- Discontinued products excluded from new orders
-- Payment method determines refund vs cancellation logic
-- Shipment records only created for eligible order statuses
-- COD payments cannot fail or be retried
-- Conversion dates always after targeting dates
-
-**3. Realistic Distributions**
-- Order item count: weighted 1–10 (small orders most common)
-- Payment methods: UPI 35%, CARD 30%, NET_BANKING 20%, COD 15%
-- Order status: DELIVERED 60%, SHIPPED 15%, CONFIRMED 10%, PENDING 8%, CANCELLED 7%
-
-**4. Reproducibility**
-Fixed random seed (`RANDOM_SEED = 42`) ensures identical output on every run.
-
-**5. Intentional NULLs vs Accidental NULLs**
-`actual_delivery_date` is NULL for IN_TRANSIT and PROCESSING shipments — by design.
-`conversion_date` is NULL for non-converted campaign customers — by design.
-These are validated explicitly in the verification layer.
+| Phase | Description | Status |
+|---|---|---|
+| 1 | Environment: Python venv, PostgreSQL, config via `.env` | ✅ Complete |
+| 2 | Business requirements, data sources, data contracts, data dictionary | ✅ Complete |
+| 3 | Source data generation, verification and quality injection | ✅ Complete |
+| 4 | **Bronze**: raw ingestion into PostgreSQL with audit metadata | 🔄 Next |
+| 5 | **Silver**: contract validation, deduplication, quarantine | ⏳ Planned |
+| 6 | **Gold**: facts, dimensions and business KPIs | ⏳ Planned |
+| 7 | Incremental loads (watermarks) and idempotent re-runs | ⏳ Planned |
+| 8 | Scale-out processing with PySpark | ⏳ Planned |
+| 9 | Orchestration (Airflow) and Docker | ⏳ Planned |
+| 10 | Cloud storage / deployment and streaming | ⏳ Planned |
 
 ---
 
-## 🚀 Setup Instructions
+## 📁 Project Structure
 
-### 1. Prerequisites
-
-Ensure the following are installed:
-
-- Python 3.10+
-- PostgreSQL 18
-- Git
+```text
+retailpulse-data-platform/
+├── docs/
+│   ├── business_requirements.md
+│   ├── data_contracts.md
+│   ├── data_dictionary.md
+│   └── data_sources.md
+├── src/retailpulse/
+│   ├── config.py                  # loads DB settings from .env
+│   ├── db_test.py                 # PostgreSQL connectivity check
+│   ├── db_health.py               # connectivity check with detailed error handling
+│   ├── utils/system_info.py
+│   └── data_generation/
+│       ├── config.py              # seeds, sizes, catalogs, distributions
+│       ├── customers.py  products.py  orders.py
+│       ├── payments.py   shipments.py marketing.py
+│       ├── injector_config.py     # declarative data-quality rules
+│       ├── quality_injector.py    # writes *_dirty.csv files
+│       └── *_verification.py      # per-dataset validation checks
+├── data/                          # generated locally, git-ignored
+├── .env.example
+└── requirements.txt
+```
 
 ---
 
-### 2. Clone the Repository
+## 🚀 Getting Started
 
-```bash
-git clone https://github.com/your-username/retailpulse-data-platform.git
+**Prerequisites:** Python 3.10+, PostgreSQL, Git.
+
+```powershell
+# 1. Clone
+git clone https://github.com/Bharatv05/retailpulse-data-platform.git
 cd retailpulse-data-platform
 
-### 3. Create and Activate Virtual Environment
-
-```bash
-# Create
+# 2. Virtual environment
 python -m venv .venv
+.venv\Scripts\Activate.ps1          # macOS/Linux: source .venv/bin/activate
 
-```PowerShell
-# Activate — PowerShell
-.venv\Scripts\Activate.ps1
-
-### 4. Install Dependencies
-
-```bash
+# 3. Dependencies
 pip install -r requirements.txt
 
-### 5. Configure Environment Variables
+# 4. Configuration
+copy .env.example .env              # macOS/Linux: cp .env.example .env
+```
 
-Copy the example file and fill in your local PostgreSQL credentials:
+Edit `.env` with your local PostgreSQL details, then create the database:
 
-```bash
+```sql
+CREATE DATABASE retailpulse;
+```
 
-cp .env.example .env
+Check the connection:
 
-Edit .env:
-
-env
-
-  POSTGRES_HOST=localhost
-  POSTGRES_PORT=5432
-  POSTGRES_DB=retailpulse
-  POSTGRES_USER=your_postgres_user
-  POSTGRES_PASSWORD=your_postgres_password
-
-⚠️ Create the database manually before proceeding:
-SQL
- CREATE DATABASE retailpulse;
-
-### 6. Validate Database Connection
-
-PowerShell
-
-$env:PYTHONPATH="src"
+```powershell
+$env:PYTHONPATH = "src"             # macOS/Linux: export PYTHONPATH=src
 python -m retailpulse.db_test
+```
 
-Expected output: 
-PostgreSQL 18.x on x86_64-windows ... ✅
+### Generate the source data
+Run from the repository root, in dependency order:
 
-⚙️ Running the Data Generators
-
-Run each generator in dependency order:
-
-PowerShell
-
-# 1. Customers (no dependencies)
+```powershell
 python -m retailpulse.data_generation.customers
-
-# 2. Products (no dependencies)
 python -m retailpulse.data_generation.products
+python -m retailpulse.data_generation.orders      # needs customers + products
+python -m retailpulse.data_generation.payments    # needs orders
+python -m retailpulse.data_generation.shipments   # needs orders
+python -m retailpulse.data_generation.marketing   # needs customers
+```
 
-# 3. Orders (depends on customers + products)
-python -m retailpulse.data_generation.orders
+### Inject data-quality issues
 
-# 4. Payments (depends on orders)
-python -m retailpulse.data_generation.payments
+```powershell
+python -m retailpulse.data_generation.quality_injector
+```
 
-# 5. Shipments (depends on orders)
-python -m retailpulse.data_generation.shipments
+### Verify
 
-# 6. Marketing (depends on customers)
-python -m retailpulse.data_generation.marketing
-
-    ⚠️ Generation order matters. Orders require customers and products to exist first.
-
-✅ Running Verification Scripts
-
-Each dataset has a dedicated verification script:
-
-PowerShell
-
-python -m retailpulse.data_generation.customers_verification
-python -m retailpulse.data_generation.products_verification
-python -m retailpulse.data_generation.orders_verification
+```powershell
+python -m retailpulse.data_generation.data_verification
+python -m retailpulse.data_generation.orders_Verification
 python -m retailpulse.data_generation.payment_verification
-python -m retailpulse.data_generation.shipments_verification
+python -m retailpulse.data_generation.shipping_verification
 python -m retailpulse.data_generation.marketing_verification
+```
 
-All scripts check:
+---
 
-    Row counts
-    ID uniqueness
-    NULL presence (intentional vs accidental)
-    Referential integrity
-    Business rule compliance
-    Date and timestamp logic
-    Statistical distributions
+## 🧭 Engineering Principles
 
-### Phase 3.7  — Quality Injection Successful
+- **Docs and contracts before code:** every dataset has a defined grain, schema and rule set.
+- **Raw data is never modified:** every downstream issue can be fixed by reprocessing.
+- **Known-answer testing:** clean and dirty versions of the same data make data-quality checks measurable.
+- **Idempotent by design:** re-running a load must not create duplicate business records.
+- **Secrets stay out of Git:** credentials come from `.env`, which is git-ignored.
 
-📊 Injection Summary — Reviewed
-Customers
+---
 
-text
+## 👤 Author
 
-Clean  : 10,000 rows
-Dirty  : 10,100 rows  (+100 duplicates)
-
-  NULL emails          : 300  (3.0%) ✅
-  Invalid email format : 100  (1.0%) ✅
-  Duplicate records    : 100  (1.0%) ✅
-  Invalid phone        : 101  (1.0%) ✅ (1 extra due to rounding — normal)
-  Timestamp reversal   :  50  (0.5%) ✅
-
-Products
-
-text
-
-Clean  : 1,000 rows
-Dirty  : 1,005 rows  (+5 duplicates)
-
-  NULL unit_price          : 10  (1.0%) ✅
-  Invalid discount         : 10  (1.0%) ✅
-  Invalid category combo   : 10  (1.0%) ✅
-  Duplicate records        :  5  (0.5%) ✅
-  Invalid status           :  5  (0.5%) ✅
-
-Orders
-
-text
-
-Clean  : 40,000 rows
-Dirty  : 40,400 rows  (+400 duplicates)
-
-  NULL customer_id       : 400  (1.0%) ✅
-  Duplicate records      : 400  (1.0%) ✅
-  Invalid order status   : 404  (1.0%) ✅
-  Negative total_amount  : 202  (0.5%) ✅
-  Timestamp reversal     : 202  (0.5%) ✅
-
-Order Items
-
-text
-
-Clean  : 101,952 rows
-Dirty  : 102,461 rows  (+509 duplicates)
-
-  Invalid product_id     : 1,019  (1.0%) ✅
-  Invalid order_id       :   509  (0.5%) ✅
-  Zero/negative quantity : 1,019  (1.0%) ✅
-  Incorrect total_price  : 1,019  (1.0%) ✅
-  Duplicate records      :   509  (0.5%) ✅
-
-Payments
-
-text
-
-Clean  : 40,000 rows
-Dirty  : 40,200 rows  (+200 duplicates)
-
-  Invalid order_id       : 200  (0.5%) ✅
-  Amount mismatch        : 400  (1.0%) ✅
-  Invalid payment status : 400  (1.0%) ✅
-  Duplicate records      : 200  (0.5%) ✅
-  NULL payment_method    : 402  (1.0%) ✅
-
-Shipments
-
-text
-
-Clean  : 34,176 rows
-Dirty  : 34,176 rows  (no duplicates injected — by design)
-
-  Invalid order_id         : 170  (0.5%) ✅
-  Invalid date sequence    : 341  (1.0%) ✅
-  Invalid shipment status  : 341  (1.0%) ✅
-  Missing delivered date   : 238  (1.0% of DELIVERED rows) ✅
-
-Campaigns
-
-text
-
-Clean  : 50 rows
-Dirty  : 51 rows  (+1 duplicate)
-
-  Invalid date range  : 1  (1 row — dataset is only 50 rows, rates produce ~1) ✅
-  Invalid budget      : 1  ✅
-  Invalid status      : 1  ✅
-  Duplicate record    : 1  ✅
-
-    Small dataset + small rates = very few affected rows. This is statistically correct. With only 50 campaigns, 1% = 0.5 rows → rounds to 1.
-
-Campaign Customers
-
-text
-
-Clean  : 126,854 rows
-Dirty  : 129,391 rows  (+2,537 duplicates)
-
-  Invalid campaign_id          :   634  (0.5%) ✅
-  Invalid customer_id          : 1,268  (1.0%) ✅
-  Duplicate pairs              : 2,537  (2.0%) ✅
-  Invalid conversion_date      :   227  (1.0% of converted rows) ✅
-  False converted with date    : 1,066  (1.0% of non-converted rows) ✅
-
-📁 Project Structure
-
-data/source/
-├── customers/
-│   ├── customers.csv              10,000 rows   ✅ clean
-│   └── customers_dirty.csv        10,100 rows   ✅ injected
-│
-├── products/
-│   ├── products.csv                1,000 rows   ✅ clean
-│   └── products_dirty.csv          1,005 rows   ✅ injected
-│
-├── orders/
-│   ├── orders.csv                 40,000 rows   ✅ clean
-│   ├── orders_dirty.csv           40,400 rows   ✅ injected
-│   ├── order_items.csv           101,952 rows   ✅ clean
-│   └── order_items_dirty.csv     102,461 rows   ✅ injected
-│
-├── payments/
-│   ├── payments.csv               40,000 rows   ✅ clean
-│   └── payments_dirty.csv         40,200 rows   ✅ injected
-│
-├── shipments/
-│   ├── shipments.csv              34,176 rows   ✅ clean
-│   └── shipments_dirty.csv        34,176 rows   ✅ injected
-│
-└── marketing/
-    ├── campaigns.csv                  50 rows   ✅ clean
-    ├── campaigns_dirty.csv            51 rows   ✅ injected
-    ├── campaign_customers.csv    126,854 rows   ✅ clean
-    └── campaign_customers_dirty.csv 129,391 rows ✅ injected
-    
-📋 Phase Progress
-Phase	Description	Status
-Phase 1	Environment setup, PostgreSQL, virtual environment	✅ Complete
-Phase 2	Business requirements and documentation	✅ Complete
-Phase 3	Source data generation and validation	✅ Complete
-Phase 4	Bronze layer ingestion into PostgreSQL	🔄 Next
-Phase 5	Silver layer — validation and cleaning	⏳ Upcoming
-Phase 6	Gold layer — business aggregations	⏳ Upcoming
-Phase 7	PySpark processing	⏳ Upcoming
-Phase 8	Docker containerisation	⏳ Upcoming
-Phase 9	Cloud deployment	⏳ Upcoming
-Phase 10	Streaming and real-time processing	⏳ Upcoming
-
+**Bharat V**, Data Engineer · [GitHub](https://github.com/Bharatv05)
